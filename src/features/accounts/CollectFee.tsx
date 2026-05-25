@@ -1,6 +1,6 @@
-// src/features/accounts/CollectFee.tsx (বা আপনার ফোল্ডার অনুযায়ী)
+// src/features/finance/CollectFee.tsx
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, CreditCard, Save, CheckCircle, ArrowLeft, Printer, X, Plus, List as ListIcon } from 'lucide-react';
+import { Search, CreditCard, Save, CheckCircle, ArrowLeft, Printer, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../config/supabase';
 
@@ -14,16 +14,12 @@ export default function CollectFee() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
 
-  // ডাইনামিক ফি টাইপ স্টেট
-  const [feeTypes, setFeeTypes] = useState<string[]>([]);
-  const [isCustomFeeType, setIsCustomFeeType] = useState(false);
-
   // রসিদ প্রিন্ট করার স্টেট
   const [receiptData, setReceiptData] = useState<any>(null);
 
   const currentYear = new Date().getFullYear();
   const [formData, setFormData] = useState({
-    fee_type: '',
+    fee_type: 'Monthly Fee',
     fee_month: new Date().toLocaleString('default', { month: 'long' }),
     fee_year: currentYear,
     total_amount: '',
@@ -34,38 +30,64 @@ export default function CollectFee() {
     remarks: ''
   });
 
-  // পেজ লোড হলে স্টুডেন্ট এবং ফি টাইপ ডেটা আনা
+  // পেজ লোড হলে স্টুডেন্টদের ডেটা আনা
   useEffect(() => {
-    const fetchInitialData = async () => {
+    const fetchStudents = async () => {
       try {
-        // ১. স্টুডেন্ট ফেচ
-        const { data: studentData, error: studentError } = await supabase
+        const { data, error } = await supabase
           .from('students')
           .select('id, first_name, last_name, admission_no, class_name, section, guardian_phone, status');
-        if (studentError) throw studentError;
-        if (studentData) setStudents(studentData);
-
-        // ২. ফি টাইপ ফেচ
-        const { data: feeData, error: feeError } = await supabase
-          .from('fee_types')
-          .select('name')
-          .order('name');
-        if (feeError) throw feeError;
-        if (feeData) {
-          const typeList = feeData.map(f => f.name);
-          setFeeTypes(typeList);
-          // ডিফল্টভাবে প্রথম ফি টাইপ সেট করা
-          if (typeList.length > 0 && !formData.fee_type) {
-            setFormData(prev => ({ ...prev, fee_type: typeList[0] }));
-          }
-        }
+        if (error) throw error;
+        if (data) setStudents(data);
       } catch (err) {
-        console.error('Error fetching initial data:', err);
+        console.error('Error fetching students:', err);
       }
     };
-    fetchInitialData();
+    fetchStudents();
   }, []);
 
+  // 🚀 অটোমেটিক অ্যামাউন্ট আনার লজিক (আপডেটেড)
+  // 🚀 অটোমেটিক অ্যামাউন্ট আনার লজিক (ডিবাগিং ভার্সন)
+  useEffect(() => {
+    async function fetchConfiguredFee() {
+      if (!selectedStudent || !formData.fee_type) return;
+      
+      console.log(`🔍 ডাটাবেসে খুঁজছি -> Class: "${selectedStudent.class_name}" | Fee Type: "${formData.fee_type}"`);
+      
+      try {
+        const { data, error } = await supabase
+          .from('fee_structures') 
+          .select('amount') 
+          .eq('class_name', selectedStudent.class_name) 
+          .eq('fee_type', formData.fee_type) 
+          .maybeSingle();
+
+        console.log("📥 ডাটাবেস থেকে উত্তর আসলো:", data);
+
+        if (data && !error && data.amount) {
+          setFormData(prev => ({ 
+            ...prev, 
+            total_amount: data.amount.toString(),
+            paid_amount: data.amount.toString() 
+          }));
+          console.log("✅ অ্যামাউন্ট ফর্মে বসানো হয়েছে:", data.amount);
+        } else {
+          setFormData(prev => ({ 
+            ...prev, 
+            total_amount: '',
+            paid_amount: '' 
+          }));
+          console.log("❌ কোনো ডেটা মেলেনি! দয়া করে সুপাবেসে বানান চেক করুন।");
+        }
+      } catch (err) {
+        console.error("Fee setup fetch error", err);
+      }
+    }
+
+    fetchConfiguredFee();
+  }, [selectedStudent, formData.fee_type]);
+
+  // ড্রপডাউনের জন্য সার্চ ফিল্টার
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
     const query = searchQuery.toLowerCase().trim();
@@ -86,17 +108,29 @@ export default function CollectFee() {
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    
+    // ডিসকাউন্ট বসালে পেইড অ্যামাউন্ট অটোমেটিক কমে যাবে
+    if (name === 'discount') {
+      const discountVal = parseFloat(value || '0');
+      const totalVal = parseFloat(formData.total_amount || '0');
+      const newPaidAmount = totalVal - discountVal;
+      
+      setFormData({ 
+        ...formData, 
+        discount: value,
+        paid_amount: newPaidAmount > 0 ? newPaidAmount.toString() : '0'
+      });
+    } else {
+      setFormData({ ...formData, [name]: value });
+    }
   };
 
+  // পেমেন্ট সেভ করার ফাংশন
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedStudent) {
       setError("অনুগ্রহ করে আগে বাম পাশ থেকে একজন স্টুডেন্ট সিলেক্ট করুন।");
-      return;
-    }
-    if (!formData.fee_type.trim()) {
-      setError("ফি এর ধরন (Fee Type) নির্বাচন করুন বা লিখুন।");
       return;
     }
     
@@ -105,16 +139,6 @@ export default function CollectFee() {
     setSuccessMsg(null);
 
     try {
-      const finalFeeType = formData.fee_type.trim();
-
-      // যদি নতুন কাস্টম ফি টাইপ হয়, তবে ডেটাবেসে সেভ করে নেওয়া
-      if (isCustomFeeType) {
-        const { error: typeError } = await supabase
-          .from('fee_types')
-          .upsert([{ name: finalFeeType }], { onConflict: 'name' });
-        if (typeError) console.error("Error saving new fee type", typeError);
-      }
-
       const randomNum = Math.floor(1000 + Math.random() * 9000);
       const receipt_no = `REC-${currentYear}-${randomNum}`;
 
@@ -125,14 +149,11 @@ export default function CollectFee() {
       if (totalAmount <= 0) throw new Error("Total Amount অবশ্যই ০-এর বেশি হতে হবে।");
       if (paidAmount <= 0) throw new Error("Paid Amount অবশ্যই ০-এর বেশি হতে হবে।");
 
-      // ফি টাইপে "Month" লেখা থাকলে শুধু মাস সেভ করবে, না হলে null
-      const isMonthlyFee = finalFeeType.toLowerCase().includes('month');
-
       const payload = {
         receipt_no,
         student_id: selectedStudent.id,
-        fee_type: finalFeeType,
-        fee_month: isMonthlyFee ? formData.fee_month : null,
+        fee_type: formData.fee_type,
+        fee_month: formData.fee_type === 'Monthly Fee' ? formData.fee_month : null,
         fee_year: parseInt(formData.fee_year.toString(), 10),
         total_amount: totalAmount,
         discount: discountAmount,
@@ -144,6 +165,7 @@ export default function CollectFee() {
       };
 
       const { error: insertError } = await supabase.from('fees_collection').insert([payload]);
+      
       if (insertError) throw insertError;
 
       setReceiptData({
@@ -158,14 +180,8 @@ export default function CollectFee() {
         total_amount: '',
         discount: '0',
         paid_amount: '',
-        remarks: '',
-        fee_type: isCustomFeeType ? finalFeeType : feeTypes[0] || ''
+        remarks: ''
       });
-      setIsCustomFeeType(false);
-
-      // ফি টাইপ লিস্ট আপডেট করা
-      const { data: newFeeData } = await supabase.from('fee_types').select('name').order('name');
-      if (newFeeData) setFeeTypes(newFeeData.map(f => f.name));
 
     } catch (err: any) {
       console.error('Fee collection error:', err);
@@ -178,9 +194,6 @@ export default function CollectFee() {
   const handlePrint = () => {
     window.print();
   };
-
-  // স্মার্ট চেক: ফি টাইপের নামে 'month' শব্দটি আছে কি না
-  const showMonthDropdown = formData.fee_type.toLowerCase().includes('month');
 
   return (
     <>
@@ -196,7 +209,7 @@ export default function CollectFee() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column: Student Search & Info */}
+          
           <div className="lg:col-span-1 space-y-6">
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
@@ -267,7 +280,6 @@ export default function CollectFee() {
             )}
           </div>
 
-          {/* Right Column: Payment Form */}
           <div className="lg:col-span-2">
             <div className={`bg-white p-6 rounded-xl shadow-sm border border-gray-100 transition-all ${!selectedStudent ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
               <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center gap-2 border-b border-gray-100 pb-4">
@@ -280,52 +292,20 @@ export default function CollectFee() {
 
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  
-                  {/* ডায়নামিক ফি টাইপ */}
                   <div>
-                    <div className="flex justify-between items-center mb-1.5">
-                      <label className="block text-sm font-medium text-gray-700">Fee Type *</label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsCustomFeeType(!isCustomFeeType);
-                          setFormData({ ...formData, fee_type: '' });
-                        }}
-                        className="text-xs flex items-center gap-1 text-indigo-600 hover:text-indigo-800 font-medium"
-                      >
-                        {isCustomFeeType ? <ListIcon size={14} /> : <Plus size={14} />}
-                        {isCustomFeeType ? 'Select Existing' : 'Add Custom'}
-                      </button>
-                    </div>
-                    
-                    {isCustomFeeType ? (
-                      <input
-                        type="text"
-                        name="fee_type"
-                        value={formData.fee_type}
-                        onChange={handleChange}
-                        placeholder="e.g. Picnic Fee..."
-                        required
-                        className="w-full px-4 py-2 border border-indigo-300 bg-indigo-50/30 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                      />
-                    ) : (
-                      <select 
-                        name="fee_type"
-                        value={formData.fee_type} 
-                        onChange={handleChange} 
-                        className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
-                      >
-                        {feeTypes.length === 0 && <option value="">Loading...</option>}
-                        {feeTypes.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    )}
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Fee Type</label>
+                    <select name="fee_type" value={formData.fee_type} onChange={handleChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white">
+                      <option value="Monthly Fee">Monthly Tuition Fee</option>
+                      <option value="Admission Fee">Admission Fee</option>
+                      <option value="Exam Fee">Exam Fee</option>
+                      <option value="Other Fee">Other Fee</option>
+                    </select>
                   </div>
                   
-                  {/* স্মার্ট মান্থ সিলেক্টর */}
-                  {showMonthDropdown && (
+                  {formData.fee_type === 'Monthly Fee' && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Select Month</label>
-                      <select name="fee_month" value={formData.fee_month} onChange={handleChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white border-l-4 border-l-indigo-500">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Month</label>
+                      <select name="fee_month" value={formData.fee_month} onChange={handleChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white">
                         {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(m => (
                           <option key={m} value={m}>{m}</option>
                         ))}
@@ -378,7 +358,6 @@ export default function CollectFee() {
         </div>
       </div>
 
-      {/* --- RECEIPT MODAL --- (পেমেন্ট সফল হলে এই পপ-আপটি শো করবে) */}
       {receiptData && (
         <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/60 print:bg-white print:static print:inset-auto print:flex print:items-start print:justify-start overflow-y-auto pt-10 pb-10">
           <div className="bg-white w-full max-w-lg mx-auto rounded-xl shadow-2xl overflow-hidden print:shadow-none print:w-full print:max-w-none">

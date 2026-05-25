@@ -3,20 +3,41 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/useAuthStore';
 import { 
   LayoutDashboard, Users, GraduationCap, 
-  BookOpen, Wallet, LogOut, Menu 
+  BookOpen, Wallet, LogOut, Menu, ShieldCheck 
 } from 'lucide-react';
-
-const sidebarLinks = [
-  { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-  { name: 'Students', path: '/students', icon: Users },
-  { name: 'Teachers', path: '/teachers', icon: GraduationCap },
-  { name: 'Academic', path: '/academic', icon: BookOpen },
-  { name: 'Accounts', path: '/accounts', icon: Wallet }, // শুধুমাত্র এই একটি মেইন ট্যাব থাকবে
-];
 
 export default function MainLayout() {
   const { user, signOut } = useAuthStore();
   const location = useLocation();
+
+  // পারমিশন চেক করার কোর লজিক
+  const hasAccess = (perms: string[], adminOnly: boolean = false) => {
+    const userRole = user?.role?.toLowerCase() || '';
+    
+    // ১. Admin বা Super Admin হলে কোনো পারমিশন ছাড়াই সবকিছুর অ্যাক্সেস পাবে
+    if (userRole === 'admin' || userRole === 'super_admin' || userRole === 'super admin') return true;
+
+    // ২. যদি পেজটি শুধুমাত্র অ্যাডমিনদের জন্য হয়, তাহলে সাধারণ টিচারদের ঢুকতে দেবে না
+    if (adminOnly) return false;
+
+    // ৩. যদি কোনো পারমিশন রিকোয়ারমেন্ট না থাকে, তবে সবাই দেখতে পাবে
+    if (!perms || perms.length === 0) return true;
+
+    // ৪. টাইপস্ক্রিপ্ট এরর ফিক্স: অ্যারেটিকে স্পষ্টভাবে string[] হিসেবে ডিফাইন করা হয়েছে
+    const userPerms: string[] = Array.isArray(user?.permissions) ? user.permissions : [];
+    return perms.some(p => userPerms.includes(p));
+  };
+
+  const sidebarLinks = [
+    { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, perms: [] },
+    { name: 'Students', path: '/students', icon: Users, perms: ['students:view', 'students:manage'] },
+    { name: 'Teachers', path: '/teachers', icon: GraduationCap, perms: [], adminOnly: true },
+    { name: 'Academic', path: '/academic', icon: BookOpen, perms: ['academic:management', 'attendance:manage', 'exams:setup', 'exams:marks', 'exams:process'] },
+    { name: 'Accounts', path: '/accounts', icon: Wallet, perms: ['accounts:collect', 'accounts:expenses', 'accounts:reports'] },
+    { name: 'User Management', path: '/users', icon: ShieldCheck, perms: [], adminOnly: true },
+  ];
+
+  const visibleLinks = sidebarLinks.filter(link => hasAccess(link.perms || [], link.adminOnly));
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden">
@@ -27,8 +48,7 @@ export default function MainLayout() {
         </div>
         
         <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
-          {sidebarLinks.map((link) => {
-            // সাব-পেজে গেলেও যেন মেইন মেনু আইটেমটি একটিভ থাকে তার লজিক
+          {visibleLinks.map((link) => {
             const isActive = location.pathname.startsWith(link.path);
             const Icon = link.icon;
             return (
@@ -69,6 +89,7 @@ export default function MainLayout() {
           
           <div className="ml-auto flex items-center gap-4">
             <div className="text-sm text-right hidden sm:block">
+              {/* user?.name মুছে ফেলা হয়েছে, শুধু full_name ব্যবহার করা হয়েছে */}
               <p className="font-medium text-gray-900">{user?.full_name || 'Admin User'}</p>
               <p className="text-gray-500 capitalize">{user?.role || 'Super Admin'}</p>
             </div>

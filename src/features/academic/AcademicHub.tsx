@@ -37,7 +37,7 @@ export default function AcademicHub() {
       ]
     },
     {
-      id: 'exam',
+      id: 'exams',
       title: 'Exam & Result System',
       description: 'সম্পূর্ণ স্বয়ংক্রিয় রেজাল্ট প্রসেসিং এবং মার্কশিট জেনারেশন।',
       path: '/academic/exams',
