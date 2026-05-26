@@ -1,6 +1,6 @@
 // src/features/students/EditStudent.tsx
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save, User, BookOpen, Users } from 'lucide-react';
+import { ArrowLeft, Save, User, BookOpen, Users, Camera, X } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../../config/supabase';
 
@@ -15,6 +15,10 @@ export default function EditStudent() {
   const [academicClasses, setAcademicClasses] = useState<any[]>([]);
   const [academicSections, setAcademicSections] = useState<any[]>([]);
   const [filteredSections, setFilteredSections] = useState<any[]>([]);
+
+  // 🚀 ছবি আপলোডের স্টেট
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     first_name: '',
@@ -31,7 +35,11 @@ export default function EditStudent() {
     mother_name: '',
     guardian_phone: '',
     present_address: '',
-    status: 'Active'
+    status: 'Active',
+    // 🚀 নতুন যুক্ত হওয়া ফিল্ড
+    birth_cert_nid: '',
+    prev_school_info: '',
+    photo_url: ''
   });
 
   // ১. Academic ডেটা লোড করা
@@ -65,6 +73,7 @@ export default function EditStudent() {
           }, {} as any);
           
           setFormData(sanitizedData);
+          if (data.photo_url) setPhotoPreview(data.photo_url); // 🚀 বর্তমান ছবি দেখানো
         }
       } catch (err: any) {
         console.error('Error fetching student:', err);
@@ -86,8 +95,23 @@ export default function EditStudent() {
     }
   }, [formData.class_id, academicSections]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  // 🚀 ছবি সিলেক্ট করলে প্রিভিউ দেখানোর লজিক
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setPhotoFile(file);
+      setPhotoPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const removePhoto = () => {
+    setPhotoFile(null);
+    setPhotoPreview(null);
+    setFormData(prev => ({ ...prev, photo_url: '' })); // Remove existing photo link
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -111,6 +135,25 @@ export default function EditStudent() {
       updateData.class_name = selectedClass?.class_name || '';
       updateData.section = selectedSection?.section_name || null;
       updateData.section_id = updateData.section_id || null;
+
+      // 🚀 ১. যদি নতুন ছবি সিলেক্ট করা থাকে, সেটি আপলোড হবে
+      if (photoFile) {
+        const fileExt = photoFile.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random()}.${fileExt}`;
+        const filePath = `profile_pictures/${fileName}`;
+
+        const { error: uploadErr } = await supabase.storage
+          .from('student-photos')
+          .upload(filePath, photoFile);
+
+        if (uploadErr) throw uploadErr;
+
+        const { data: publicUrlData } = supabase.storage
+          .from('student-photos')
+          .getPublicUrl(filePath);
+
+        updateData.photo_url = publicUrlData.publicUrl;
+      }
 
       const { error: updateError } = await supabase
         .from('students')
@@ -147,6 +190,30 @@ export default function EditStudent() {
 
       <form onSubmit={handleSubmit} className="space-y-8">
         
+        {/* 🚀 Photo Upload Section */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-center">
+          <div className="relative">
+            <div className="w-32 h-32 rounded-full border-4 border-indigo-50 shadow-sm overflow-hidden bg-gray-50 flex items-center justify-center">
+              {photoPreview ? (
+                <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" crossOrigin="anonymous" />
+              ) : (
+                <Camera size={40} className="text-gray-300" />
+              )}
+            </div>
+            {photoPreview ? (
+              <button type="button" onClick={removePhoto} className="absolute top-0 right-0 bg-red-500 text-white p-1 rounded-full hover:bg-red-600">
+                <X size={16} />
+              </button>
+            ) : (
+              <label className="absolute bottom-0 right-0 bg-indigo-600 text-white p-2.5 rounded-full cursor-pointer hover:bg-indigo-700 shadow-md">
+                <Camera size={18} />
+                <input type="file" accept="image/*" onChange={handlePhotoSelect} className="hidden" />
+              </label>
+            )}
+          </div>
+          <p className="text-sm font-medium text-gray-500 mt-3">Update Student Photo</p>
+        </div>
+
         {/* Personal Info */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center gap-2 mb-6 pb-4 border-b border-gray-100">
@@ -252,6 +319,21 @@ export default function EditStudent() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Present Address</label>
               <input type="text" name="present_address" value={formData.present_address} onChange={handleChange} required className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500" />
+            </div>
+          </div>
+        </div>
+
+        {/* 🚀 Official Documents */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <h3 className="text-lg font-semibold text-gray-900 mb-6 pb-4 border-b border-gray-100">Official Documents & Records</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Birth Certificate / NID</label>
+              <input type="text" name="birth_cert_nid" value={formData.birth_cert_nid} onChange={handleChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Previous School Info</label>
+              <textarea name="prev_school_info" value={formData.prev_school_info} onChange={handleChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 h-11" />
             </div>
           </div>
         </div>

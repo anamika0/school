@@ -1,6 +1,6 @@
 // src/features/students/AdmissionForm.tsx
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save, User, BookOpen, Users } from 'lucide-react';
+import { ArrowLeft, Save, User, BookOpen, Users, Camera, X } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../../config/supabase';
 
@@ -13,6 +13,10 @@ export default function AdmissionForm() {
   const [academicClasses, setAcademicClasses] = useState<any[]>([]);
   const [academicSections, setAcademicSections] = useState<any[]>([]);
   const [filteredSections, setFilteredSections] = useState<any[]>([]);
+
+  // 🚀 ছবি আপলোডের স্টেট
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     first_name: '',
@@ -28,6 +32,9 @@ export default function AdmissionForm() {
     mother_name: '',
     guardian_phone: '',
     present_address: '',
+    // 🚀 নতুন যুক্ত হওয়া ফিল্ড
+    birth_cert_nid: '',
+    prev_school_info: ''
   });
 
   // Academic Management থেকে ডেটা ফেচ করা
@@ -51,8 +58,22 @@ export default function AdmissionForm() {
     }
   }, [formData.class_id, academicSections]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  // 🚀 ছবি সিলেক্ট করলে প্রিভিউ দেখানোর লজিক
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setPhotoFile(file);
+      setPhotoPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const removePhoto = () => {
+    setPhotoFile(null);
+    setPhotoPreview(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -65,15 +86,37 @@ export default function AdmissionForm() {
       const randomNum = Math.floor(1000 + Math.random() * 9000);
       const admission_no = `${currentYear}${randomNum}`;
 
-      // সিলেক্ট করা ক্লাস ও সেকশনের নাম বের করা (যাতে StudentList এ নাম ঠিকঠাক দেখায়)
+      // সিলেক্ট করা ক্লাস ও সেকশনের নাম বের করা
       const selectedClass = academicClasses.find(c => c.id === formData.class_id);
       const selectedSection = academicSections.find(s => s.id === formData.section_id);
 
+      let uploadedPhotoUrl = null;
+
+      // 🚀 ১. যদি ছবি সিলেক্ট করা থাকে, আগে সেটি Supabase Storage-এ আপলোড হবে
+      if (photoFile) {
+        const fileExt = photoFile.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random()}.${fileExt}`;
+        const filePath = `profile_pictures/${fileName}`;
+
+        const { error: uploadErr } = await supabase.storage
+          .from('student-photos')
+          .upload(filePath, photoFile);
+
+        if (uploadErr) throw uploadErr;
+
+        const { data: publicUrlData } = supabase.storage
+          .from('student-photos')
+          .getPublicUrl(filePath);
+
+        uploadedPhotoUrl = publicUrlData.publicUrl;
+      }
+
       const payload = {
         ...formData,
-        class_name: selectedClass?.class_name || '', // List এ দেখানোর জন্য
-        section: selectedSection?.section_name || null, // List এ দেখানোর জন্য
-        section_id: formData.section_id || null, // Attendance এর জন্য
+        photo_url: uploadedPhotoUrl, // 🚀 ছবির লিংক
+        class_name: selectedClass?.class_name || '', 
+        section: selectedSection?.section_name || null, 
+        section_id: formData.section_id || null, 
         blood_group: formData.blood_group || null,
         religion: formData.religion || null,
         admission_no,
@@ -109,6 +152,30 @@ export default function AdmissionForm() {
 
       <form onSubmit={handleSubmit} className="space-y-8">
         
+        {/* 🚀 Photo Upload Section */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center justify-center">
+          <div className="relative">
+            <div className="w-32 h-32 rounded-full border-4 border-indigo-50 shadow-sm overflow-hidden bg-gray-50 flex items-center justify-center">
+              {photoPreview ? (
+                <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" />
+              ) : (
+                <Camera size={40} className="text-gray-300" />
+              )}
+            </div>
+            {photoPreview ? (
+              <button type="button" onClick={removePhoto} className="absolute top-0 right-0 bg-red-500 text-white p-1 rounded-full hover:bg-red-600">
+                <X size={16} />
+              </button>
+            ) : (
+              <label className="absolute bottom-0 right-0 bg-indigo-600 text-white p-2.5 rounded-full cursor-pointer hover:bg-indigo-700 shadow-md">
+                <Camera size={18} />
+                <input type="file" accept="image/*" onChange={handlePhotoSelect} className="hidden" />
+              </label>
+            )}
+          </div>
+          <p className="text-sm font-medium text-gray-500 mt-3">Upload Student Photo (Optional)</p>
+        </div>
+
         {/* Personal Info */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center gap-2 mb-6 pb-4 border-b border-gray-100">
@@ -141,14 +208,14 @@ export default function AdmissionForm() {
               <label className="block text-sm font-medium text-gray-700 mb-2">Blood Group</label>
               <select name="blood_group" value={formData.blood_group} onChange={handleChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white">
                 <option value="">Select Group</option>
-                <option value="A+">A+</option><option value="B+">B+</option><option value="O+">O+</option><option value="AB+">AB+</option>
+                <option value="A+">A+</option><option value="B+">B+</option><option value="O+">O+</option><option value="AB+">AB+</option><option value="A-">A-</option><option value="B-">B-</option><option value="O-">O-</option><option value="AB-">AB-</option>
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Religion</label>
               <select name="religion" value={formData.religion} onChange={handleChange} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white">
                 <option value="">Select Religion</option>
-                <option value="Islam">Islam</option><option value="Hinduism">Hinduism</option><option value="Christianity">Christianity</option>
+                <option value="Islam">Islam</option><option value="Hinduism">Hinduism</option><option value="Christianity">Christianity</option><option value="Buddhism">Buddhism</option>
               </select>
             </div>
           </div>
@@ -174,7 +241,7 @@ export default function AdmissionForm() {
                 value={formData.class_id}
                 onChange={(e) => {
                   handleChange(e);
-                  setFormData(prev => ({ ...prev, section_id: '' })); // ক্লাস চেঞ্জ করলে সেকশন রিসেট
+                  setFormData(prev => ({ ...prev, section_id: '' })); 
                 }}
                 required
                 className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
@@ -223,6 +290,21 @@ export default function AdmissionForm() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Present Address *</label>
               <input type="text" name="present_address" value={formData.present_address} onChange={handleChange} required className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500" />
+            </div>
+          </div>
+        </div>
+
+        {/* 🚀 Official Documents */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <h3 className="text-lg font-semibold text-gray-900 mb-6 pb-4 border-b border-gray-100">Official Documents & Records</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Birth Certificate / NID</label>
+              <input type="text" name="birth_cert_nid" value={formData.birth_cert_nid} onChange={handleChange} placeholder="Enter tracking number" className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Previous School Info</label>
+              <textarea name="prev_school_info" value={formData.prev_school_info} onChange={handleChange} placeholder="School name, transfer details..." className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 h-11" />
             </div>
           </div>
         </div>
