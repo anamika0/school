@@ -3,7 +3,8 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/useAuthStore';
 import { 
   LayoutDashboard, Users, GraduationCap, 
-  BookOpen, Wallet, LogOut, Menu, ShieldCheck 
+  BookOpen, Wallet, LogOut, Menu, ShieldCheck, 
+  MonitorPlay // 🚀 BDT-Soft এর লোগোর জন্য নতুন আইকন
 } from 'lucide-react';
 
 export default function MainLayout() {
@@ -40,14 +41,22 @@ export default function MainLayout() {
   const visibleLinks = sidebarLinks.filter(link => hasAccess(link.perms || [], link.adminOnly));
 
   return (
-    <div className="flex h-screen bg-gray-100 overflow-hidden">
+    <div className="flex h-screen bg-gray-50 overflow-hidden">
       {/* Sidebar */}
-      <aside className="w-64 bg-indigo-900 text-white hidden md:flex flex-col">
-        <div className="h-16 flex items-center justify-center border-b border-indigo-800">
-          <h1 className="text-xl font-bold tracking-wider">BD School ERP</h1>
+      <aside className="w-64 bg-indigo-950 text-white hidden md:flex flex-col shadow-2xl relative z-20">
+        
+        {/* 🚀 ১. Premium School Header */}
+        <div className="p-6 border-b border-indigo-800/50 bg-indigo-900/20">
+          <h1 className="text-2xl font-black tracking-wide text-white">
+            A.K High School
+          </h1>
+          <p className="text-[10px] text-indigo-300 font-bold mt-1.5 uppercase tracking-[0.25em]">
+            School Management
+          </p>
         </div>
         
-        <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
+        {/* Navigation Links */}
+        <nav className="flex-1 py-6 px-4 space-y-1.5 overflow-y-auto custom-scrollbar">
           {visibleLinks.map((link) => {
             const isActive = location.pathname.startsWith(link.path);
             const Icon = link.icon;
@@ -55,52 +64,67 @@ export default function MainLayout() {
               <Link
                 key={link.name}
                 to={link.path}
-                className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-colors ${
-                  isActive ? 'bg-indigo-800 text-white' : 'text-indigo-200 hover:bg-indigo-800 hover:text-white'
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                  isActive 
+                    ? 'bg-indigo-600 shadow-md shadow-indigo-900/50 text-white font-bold' 
+                    : 'text-indigo-200/80 hover:bg-indigo-800/50 hover:text-white font-medium'
                 }`}
               >
-                <Icon size={20} />
-                <span className="font-medium">{link.name}</span>
+                <Icon size={20} className={isActive ? 'text-white' : 'text-indigo-300'} />
+                <span>{link.name}</span>
               </Link>
             );
           })}
         </nav>
 
-        <div className="p-4 border-t border-indigo-800">
+        {/* 🚀 ২. Premium Footer (BDT-Soft + Logout) */}
+        <div className="p-5 border-t border-indigo-800/50 bg-indigo-950/80">
+          
+          {/* BDT-Soft Branding */}
+          <div className="flex items-center justify-center gap-2.5 mb-5 text-indigo-400/70 hover:text-indigo-300 transition-colors cursor-default">
+            <div className="p-1.5 bg-indigo-900/50 rounded-md border border-indigo-800/50">
+              <MonitorPlay size={14} className="text-indigo-300" />
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-[0.2em]">Powered by BDT-Soft</span>
+          </div>
+
+          {/* Premium Logout Button */}
           <button 
             onClick={signOut}
-            className="flex items-center gap-3 w-full px-3 py-2 text-indigo-200 hover:text-white hover:bg-indigo-800 rounded-lg transition-colors"
+            className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/20 rounded-xl transition-all duration-300 font-bold shadow-sm"
           >
-            <LogOut size={20} />
-            <span>Logout</span>
+            <LogOut size={18} />
+            <span>Log Out</span>
           </button>
+
         </div>
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col h-screen relative">
+      <main className="flex-1 flex flex-col h-screen relative bg-gray-50/50">
         {/* Header */}
-        <header className="h-16 bg-white shadow-sm flex items-center justify-between px-6 z-10">
+        <header className="h-16 bg-white shadow-sm flex items-center justify-between px-6 z-10 border-b border-gray-100">
           <div className="flex items-center gap-4 md:hidden">
-            <button className="p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100">
+            <button className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors">
               <Menu size={24} />
             </button>
           </div>
           
           <div className="ml-auto flex items-center gap-4">
             <div className="text-sm text-right hidden sm:block">
-              {/* user?.name মুছে ফেলা হয়েছে, শুধু full_name ব্যবহার করা হয়েছে */}
-              <p className="font-medium text-gray-900">{user?.full_name || 'Admin User'}</p>
-              <p className="text-gray-500 capitalize">{user?.role || 'Super Admin'}</p>
+              <p className="font-bold text-gray-900">{user?.full_name || 'Admin User'}</p>
+              <p className="text-xs text-indigo-600 font-semibold capitalize bg-indigo-50 inline-block px-2 py-0.5 rounded-full mt-0.5">
+                {user?.role || 'Super Admin'}
+              </p>
             </div>
-            <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold border border-indigo-200">
+            <div className="h-10 w-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-black shadow-md shadow-indigo-200">
               {(user?.full_name || 'A').charAt(0).toUpperCase()}
             </div>
           </div>
         </header>
 
         {/* Dynamic Page Content */}
-        <div className="flex-1 overflow-auto p-6">
+        <div className="flex-1 overflow-auto p-6 md:p-8">
           <Outlet />
         </div>
       </main>
