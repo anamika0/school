@@ -1,6 +1,6 @@
 // src/features/accounts/ReportsHub.tsx
 import { Link } from 'react-router-dom';
-import { PieChart, AlertCircle, ArrowRight, FileText, Scale } from 'lucide-react';
+import { PieChart, AlertCircle, ArrowRight, FileText, Scale, ArrowLeft } from 'lucide-react';
 
 export default function ReportsHub() {
   const reportCards = [
@@ -33,12 +33,19 @@ export default function ReportsHub() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-10">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-          <FileText className="text-indigo-600" size={26} />
-          Reports Management
-        </h2>
-        <p className="text-gray-500 mt-1">সফটওয়্যারের যাবতীয় আর্থিক ও বকেয়া রিপোর্টগুলো এখান থেকে পরিচালনা করুন।</p>
+      
+      {/* 🚀 Header with Back Button */}
+      <div className="flex items-center gap-4 mb-2">
+        <Link to="/accounts" className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+          <ArrowLeft size={24} className="text-gray-600" />
+        </Link>
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <FileText className="text-indigo-600" size={26} />
+            Reports Management
+          </h2>
+          <p className="text-gray-500 mt-1">সফটওয়্যারের যাবতীয় আর্থিক ও বকেয়া রিপোর্টগুলো এখান থেকে পরিচালনা করুন।</p>
+        </div>
       </div>
 
       {/* রিপোর্ট কার্ড গ্রিড */}

@@ -84,7 +84,11 @@ export default function DueReport() {
         return type.includes('admission');
       });
 
-      const classFees = structures.filter(s => s.class_id == student.class_id);
+      // 🚀 ফিক্সড: class_id এর বদলে class_name দিয়ে ডাটাবেস থেকে ফি কনফিগারেশন ম্যাচ করানো হয়েছে
+      const classFees = structures.filter(s => 
+        s.class_name && student.class_name && 
+        s.class_name.toLowerCase() === student.class_name.toLowerCase()
+      );
       
       const monthlyFeeConfig = classFees.find(s => s.fee_type && (s.fee_type.toLowerCase().includes('month') || s.fee_type.toLowerCase().includes('tuition')));
       const monthlyRate = monthlyFeeConfig ? Number(monthlyFeeConfig.amount) : 1500;
@@ -233,7 +237,6 @@ export default function DueReport() {
                   <td colSpan={4} className="px-6 py-10 text-center text-gray-500 font-medium print:hidden">হিসাব করা হচ্ছে...</td>
                 </tr>
               ) : students.length === 0 ? (
-                /* --- নতুন এরর মেসেজ (যদি ডাটাবেস থেকে স্টুডেন্ট না আসে) --- */
                 <tr>
                   <td colSpan={4} className="px-6 py-10 text-center text-red-500 font-bold print:hidden">
                     ⚠️ ডাটাবেস থেকে কোনো স্টুডেন্ট ডাটা পাওয়া যায়নি! দয়া করে ইন্টারনেট কানেকশন বা স্টুডেন্ট ডাটাবেস চেক করুন।

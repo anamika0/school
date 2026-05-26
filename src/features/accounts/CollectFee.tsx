@@ -1,8 +1,10 @@
 // src/features/finance/CollectFee.tsx
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, CreditCard, Save, CheckCircle, ArrowLeft, Printer, X } from 'lucide-react';
+import { Search, CreditCard, Save, CheckCircle, ArrowLeft, Printer, X, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../config/supabase';
+
+const allMonths = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 export default function CollectFee() {
   const [loading, setLoading] = useState(false);
@@ -13,6 +15,10 @@ export default function CollectFee() {
   const [students, setStudents] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
+
+  // ডিউ রিপোর্ট দেখানোর জন্য স্টেট
+  const [feeStructures, setFeeStructures] = useState<any[]>([]);
+  const [dueSummary, setDueSummary] = useState<any>(null);
 
   // রসিদ প্রিন্ট করার স্টেট
   const [receiptData, setReceiptData] = useState<any>(null);
@@ -30,29 +36,88 @@ export default function CollectFee() {
     remarks: ''
   });
 
-  // পেজ লোড হলে স্টুডেন্টদের ডেটা আনা
+  // পেজ লোড হলে স্টুডেন্ট এবং ফি স্ট্রাকচার ডেটা আনা
   useEffect(() => {
-    const fetchStudents = async () => {
+    const fetchInitialData = async () => {
       try {
-        const { data, error } = await supabase
+        const { data: stdData } = await supabase
           .from('students')
           .select('id, first_name, last_name, admission_no, class_name, section, guardian_phone, status');
-        if (error) throw error;
-        if (data) setStudents(data);
+        if (stdData) setStudents(stdData);
+
+        const { data: structData } = await supabase.from('fee_structures').select('*');
+        if (structData) setFeeStructures(structData);
       } catch (err) {
-        console.error('Error fetching students:', err);
+        console.error('Error fetching initial data:', err);
       }
     };
-    fetchStudents();
+    fetchInitialData();
   }, []);
 
-  // 🚀 অটোমেটিক অ্যামাউন্ট আনার লজিক (আপডেটেড)
-  // 🚀 অটোমেটিক অ্যামাউন্ট আনার লজিক (ডিবাগিং ভার্সন)
+  // স্টুডেন্ট সিলেক্ট করলে তার ডিউ হিসাব করে বের করার লজিক
+  useEffect(() => {
+    const calculateDueSummary = async () => {
+      if (!selectedStudent || feeStructures.length === 0) {
+        setDueSummary(null);
+        return;
+      }
+
+      try {
+        const { data: payments } = await supabase
+          .from('fees_collection')
+          .select('*')
+          .eq('student_id', selectedStudent.id)
+          .eq('fee_year', currentYear);
+
+        const allPayments = payments || [];
+        const currentMonthIndex = new Date().getMonth();
+        const targetMonths = allMonths.slice(0, currentMonthIndex + 1);
+
+        const paidMonthly = allPayments
+          .filter(f => (f.fee_type || '').toLowerCase().includes('month') || (f.fee_type || '').toLowerCase().includes('tuition'))
+          .map(f => (f.fee_month || '').trim());
+
+        const unpaidMonths = targetMonths.filter(m => !paidMonthly.includes(m));
+
+        const hasPaidAdmission = allPayments.some(f => (f.fee_type || '').toLowerCase().includes('admission'));
+
+        const classFees = feeStructures.filter(s => 
+          s.class_name && selectedStudent.class_name && 
+          s.class_name.toLowerCase() === selectedStudent.class_name.toLowerCase()
+        );
+
+        const monthlyFeeConfig = classFees.find(s => s.fee_type && (s.fee_type.toLowerCase().includes('month') || s.fee_type.toLowerCase().includes('tuition')));
+        const monthlyRate = monthlyFeeConfig ? Number(monthlyFeeConfig.amount) : 0;
+
+        const admissionFeeConfig = classFees.find(s => s.fee_type && s.fee_type.toLowerCase().includes('admission'));
+        const admissionRate = admissionFeeConfig ? Number(admissionFeeConfig.amount) : 0;
+
+        const monthlyDueAmount = unpaidMonths.length * monthlyRate;
+        const admissionDueAmount = hasPaidAdmission ? 0 : admissionRate;
+        const totalDueAmount = monthlyDueAmount + admissionDueAmount;
+
+        setDueSummary({
+          unpaidMonths,
+          monthlyDueAmount,
+          hasPaidAdmission,
+          admissionDueAmount,
+          totalDueAmount,
+          monthlyRate,
+          admissionRate
+        });
+
+      } catch (err) {
+        console.error("Error calculating due:", err);
+      }
+    };
+
+    calculateDueSummary();
+  }, [selectedStudent, feeStructures, currentYear]);
+
+  // অটোমেটিক অ্যামাউন্ট আনার লজিক
   useEffect(() => {
     async function fetchConfiguredFee() {
       if (!selectedStudent || !formData.fee_type) return;
-      
-      console.log(`🔍 ডাটাবেসে খুঁজছি -> Class: "${selectedStudent.class_name}" | Fee Type: "${formData.fee_type}"`);
       
       try {
         const { data, error } = await supabase
@@ -62,22 +127,18 @@ export default function CollectFee() {
           .eq('fee_type', formData.fee_type) 
           .maybeSingle();
 
-        console.log("📥 ডাটাবেস থেকে উত্তর আসলো:", data);
-
         if (data && !error && data.amount) {
           setFormData(prev => ({ 
             ...prev, 
             total_amount: data.amount.toString(),
             paid_amount: data.amount.toString() 
           }));
-          console.log("✅ অ্যামাউন্ট ফর্মে বসানো হয়েছে:", data.amount);
         } else {
           setFormData(prev => ({ 
             ...prev, 
             total_amount: '',
             paid_amount: '' 
           }));
-          console.log("❌ কোনো ডেটা মেলেনি! দয়া করে সুপাবেসে বানান চেক করুন।");
         }
       } catch (err) {
         console.error("Fee setup fetch error", err);
@@ -110,7 +171,6 @@ export default function CollectFee() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     
-    // ডিসকাউন্ট বসালে পেইড অ্যামাউন্ট অটোমেটিক কমে যাবে
     if (name === 'discount') {
       const discountVal = parseFloat(value || '0');
       const totalVal = parseFloat(formData.total_amount || '0');
@@ -139,15 +199,44 @@ export default function CollectFee() {
     setSuccessMsg(null);
 
     try {
-      const randomNum = Math.floor(1000 + Math.random() * 9000);
-      const receipt_no = `REC-${currentYear}-${randomNum}`;
-
       const totalAmount = parseFloat(formData.total_amount || '0');
       const discountAmount = parseFloat(formData.discount || '0');
       const paidAmount = parseFloat(formData.paid_amount || '0');
 
       if (totalAmount <= 0) throw new Error("Total Amount অবশ্যই ০-এর বেশি হতে হবে।");
       if (paidAmount <= 0) throw new Error("Paid Amount অবশ্যই ০-এর বেশি হতে হবে।");
+
+      // 🚀 ---------------- ডুপ্লিকেট পেমেন্ট প্রোটেকশন ---------------- 🚀
+      let duplicateQuery = supabase
+        .from('fees_collection')
+        .select('id')
+        .eq('student_id', selectedStudent.id)
+        .eq('fee_type', formData.fee_type)
+        .eq('fee_year', parseInt(formData.fee_year.toString(), 10));
+
+      // যদি Monthly Fee হয়, তবে নির্দিষ্ট মাস চেক করবে
+      if (formData.fee_type === 'Monthly Fee') {
+        duplicateQuery = duplicateQuery.eq('fee_month', formData.fee_month);
+      }
+
+      const { data: existingData, error: duplicateCheckError } = await duplicateQuery;
+      
+      if (duplicateCheckError) throw duplicateCheckError;
+      
+      // যদি ডাটাবেসে পেমেন্ট পাওয়া যায়, তাহলে সেভ না করে এরর দেখাবে
+      if (existingData && existingData.length > 0) {
+        if (formData.fee_type === 'Monthly Fee') {
+          throw new Error(`⚠️ এই স্টুডেন্ট ইতিমধ্যে ${formData.fee_month} মাসের ফি জমা দিয়েছে! একই মাসের ফি দুইবার নেওয়া যাবে না।`);
+        } else if (formData.fee_type === 'Admission Fee') {
+          throw new Error(`⚠️ এই স্টুডেন্ট ইতিমধ্যে ভর্তি ফি (Admission Fee) জমা দিয়েছে!`);
+        } else {
+          throw new Error(`⚠️ এই স্টুডেন্ট ইতিমধ্যে ${formData.fee_type} জমা দিয়েছে!`);
+        }
+      }
+      // 🚀 ----------------------------------------------------------------- 🚀
+
+      const randomNum = Math.floor(1000 + Math.random() * 9000);
+      const receipt_no = `REC-${currentYear}-${randomNum}`;
 
       const payload = {
         receipt_no,
@@ -175,6 +264,8 @@ export default function CollectFee() {
       
       setSuccessMsg(`ফি সফলভাবে গ্রহণ করা হয়েছে!`);
       
+      setSelectedStudent({...selectedStudent});
+
       setFormData({
         ...formData,
         total_amount: '',
@@ -210,6 +301,7 @@ export default function CollectFee() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
+          {/* Left Column: Search & Selected Student Info */}
           <div className="lg:col-span-1 space-y-6">
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
@@ -280,7 +372,55 @@ export default function CollectFee() {
             )}
           </div>
 
-          <div className="lg:col-span-2">
+          {/* Right Column: Due Summary & Payment Details */}
+          <div className="lg:col-span-2 space-y-6">
+            
+            {selectedStudent && dueSummary && (
+              <div className={`p-6 rounded-xl shadow-sm border transition-all ${dueSummary.totalDueAmount > 0 ? 'bg-red-50 border-red-100' : 'bg-green-50 border-green-100'}`}>
+                <h3 className={`text-lg font-bold mb-4 flex items-center gap-2 border-b pb-2 ${dueSummary.totalDueAmount > 0 ? 'text-red-800 border-red-200' : 'text-green-800 border-green-200'}`}>
+                  {dueSummary.totalDueAmount > 0 ? <AlertCircle size={20} /> : <CheckCircle size={20} />}
+                  Current Due Summary (Till {allMonths[new Date().getMonth()]})
+                </h3>
+                
+                {dueSummary.totalDueAmount > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                     <div className="bg-white p-4 rounded-lg border border-red-100 shadow-sm">
+                       <p className="text-sm text-gray-500 font-bold mb-1">Monthly Dues ({dueSummary.unpaidMonths.length} M)</p>
+                       <p className="text-xl font-black text-red-600">৳ {dueSummary.monthlyDueAmount}</p>
+                       {dueSummary.unpaidMonths.length > 0 && (
+                         <div className="flex flex-wrap gap-1 mt-2">
+                           {dueSummary.unpaidMonths.map((m: string) => <span key={m} className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold">{m.substring(0,3)}</span>)}
+                         </div>
+                       )}
+                     </div>
+                     
+                     <div className="bg-white p-4 rounded-lg border border-red-100 shadow-sm">
+                       <p className="text-sm text-gray-500 font-bold mb-1">Admission Fee</p>
+                       {dueSummary.hasPaidAdmission ? (
+                         <span className="text-sm font-bold text-green-600 bg-green-50 px-2 py-1 rounded">Paid</span>
+                       ) : (
+                         <p className="text-xl font-black text-red-600">৳ {dueSummary.admissionDueAmount}</p>
+                       )}
+                     </div>
+                     
+                     <div className="bg-red-600 p-4 rounded-lg shadow-sm flex flex-col justify-center items-center text-white">
+                       <p className="text-sm font-bold text-red-200 mb-1">Total Due</p>
+                       <p className="text-2xl font-black">৳ {dueSummary.totalDueAmount}</p>
+                     </div>
+                  </div>
+                ) : (
+                  <div className="bg-white p-4 rounded-lg border border-green-200 shadow-sm flex items-center justify-center gap-3">
+                    <CheckCircle className="text-green-500" size={28} />
+                    <div>
+                      <p className="text-lg font-bold text-green-700">All Clear!</p>
+                      <p className="text-sm text-green-600">This student has no pending dues up to the current month.</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Payment Details Form */}
             <div className={`bg-white p-6 rounded-xl shadow-sm border border-gray-100 transition-all ${!selectedStudent ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
               <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center gap-2 border-b border-gray-100 pb-4">
                 <CreditCard className="text-indigo-600" size={20} />
