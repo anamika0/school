@@ -222,7 +222,7 @@ export default function DueReport() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse print:text-sm">
+          <table className="w-full text-left border-collapse whitespace nowrap print:text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100 text-sm print:bg-transparent print:border-b-2 print:border-gray-800">
                 <th className="px-6 py-4 font-semibold text-gray-600">Student Info</th>

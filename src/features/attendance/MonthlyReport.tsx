@@ -225,7 +225,7 @@ export default function MonthlyReport() {
           </div>
           
           <div className="overflow-x-auto p-4">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse whitespace-nowrap">
               <thead>
                 <tr className="bg-gray-100 border-b-2 border-gray-200 text-sm">
                   <th className="p-4 font-bold text-gray-700">Name & ID</th>

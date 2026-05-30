@@ -149,7 +149,7 @@ export default function TeacherAttendance() {
           </div>
           
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
+            <table className="w-full text-left border-collapse whitespace-nowrap">
               <thead>
                 <tr className="bg-white border-b border-gray-100 text-sm">
                   <th className="px-6 py-4 font-bold text-gray-600">Employee Details</th>

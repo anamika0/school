@@ -540,7 +540,7 @@ export default function CollectFee() {
                 </div>
               </div>
 
-              <table className="w-full text-sm mb-6">
+              <table className="w-full text-left border-collapse whitespace-nowrap">
                 <thead>
                   <tr className="border-b-2 border-gray-800">
                     <th className="text-left py-2">Description</th>

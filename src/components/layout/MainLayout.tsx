@@ -1,30 +1,25 @@
 // src/components/layout/MainLayout.tsx
+import { useState } from 'react'; // 🚀 useState যুক্ত করা হয়েছে
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/useAuthStore';
 import { 
   LayoutDashboard, Users, GraduationCap, 
   BookOpen, Wallet, LogOut, Menu, ShieldCheck, 
-  MonitorPlay // 🚀 BDT-Soft এর লোগোর জন্য নতুন আইকন
+  MonitorPlay, X // 🚀 ক্লোজ আইকন যুক্ত করা হয়েছে
 } from 'lucide-react';
 
 export default function MainLayout() {
   const { user, signOut } = useAuthStore();
   const location = useLocation();
+  
+  // 🚀 মোবাইল মেনু ওপেন/ক্লোজ করার স্টেট
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // পারমিশন চেক করার কোর লজিক
   const hasAccess = (perms: string[], adminOnly: boolean = false) => {
     const userRole = user?.role?.toLowerCase() || '';
-    
-    // ১. Admin বা Super Admin হলে কোনো পারমিশন ছাড়াই সবকিছুর অ্যাক্সেস পাবে
     if (userRole === 'admin' || userRole === 'super_admin' || userRole === 'super admin') return true;
-
-    // ২. যদি পেজটি শুধুমাত্র অ্যাডমিনদের জন্য হয়, তাহলে সাধারণ টিচারদের ঢুকতে দেবে না
     if (adminOnly) return false;
-
-    // ৩. যদি কোনো পারমিশন রিকোয়ারমেন্ট না থাকে, তবে সবাই দেখতে পাবে
     if (!perms || perms.length === 0) return true;
-
-    // ৪. টাইপস্ক্রিপ্ট এরর ফিক্স: অ্যারেটিকে স্পষ্টভাবে string[] হিসেবে ডিফাইন করা হয়েছে
     const userPerms: string[] = Array.isArray(user?.permissions) ? user.permissions : [];
     return perms.some(p => userPerms.includes(p));
   };
@@ -40,19 +35,42 @@ export default function MainLayout() {
 
   const visibleLinks = sidebarLinks.filter(link => hasAccess(link.perms || [], link.adminOnly));
 
+  // মেনু লিংকে ক্লিক করলে যেন মোবাইল মেনু অটোমেটিক বন্ধ হয়ে যায়
+  const handleLinkClick = () => {
+    setIsMobileMenuOpen(false);
+  };
+
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-64 bg-indigo-950 text-white hidden md:flex flex-col shadow-2xl relative z-20">
+    <div className="flex h-screen bg-gray-50 overflow-hidden relative">
+      
+      {/* 🚀 Mobile Menu Overlay (কালো ব্যাকগ্রাউন্ড) */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/60 z-40 md:hidden backdrop-blur-sm transition-opacity"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Sidebar - 🚀 মোবাইলের জন্য রেসপন্সিভ করা হয়েছে */}
+      <aside className={`
+        fixed inset-y-0 left-0 z-50 w-72 bg-indigo-950 text-white flex flex-col shadow-2xl transition-transform duration-300 ease-in-out
+        md:relative md:w-64 md:translate-x-0
+        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+      `}>
         
-        {/* 🚀 ১. Premium School Header */}
-        <div className="p-6 border-b border-indigo-800/50 bg-indigo-900/20">
-          <h1 className="text-2xl font-black tracking-wide text-white">
-            A.K High School
-          </h1>
-          <p className="text-[10px] text-indigo-300 font-bold mt-1.5 uppercase tracking-[0.25em]">
-            School Management
-          </p>
+        {/* Premium School Header */}
+        <div className="p-6 border-b border-indigo-800/50 bg-indigo-900/20 flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-black tracking-wide text-white">A.K High School</h1>
+            <p className="text-[10px] text-indigo-300 font-bold mt-1.5 uppercase tracking-[0.25em]">School Management</p>
+          </div>
+          {/* 🚀 মোবাইলের জন্য ক্লোজ বাটন */}
+          <button 
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="md:hidden p-2 rounded-lg text-indigo-300 hover:text-white hover:bg-indigo-800/50 transition-colors"
+          >
+            <X size={24} />
+          </button>
         </div>
         
         {/* Navigation Links */}
@@ -64,6 +82,7 @@ export default function MainLayout() {
               <Link
                 key={link.name}
                 to={link.path}
+                onClick={handleLinkClick}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
                   isActive 
                     ? 'bg-indigo-600 shadow-md shadow-indigo-900/50 text-white font-bold' 
@@ -77,10 +96,8 @@ export default function MainLayout() {
           })}
         </nav>
 
-        {/* 🚀 ২. Premium Footer (BDT-Soft + Logout) */}
+        {/* Premium Footer (BDT-Soft + Logout) */}
         <div className="p-5 border-t border-indigo-800/50 bg-indigo-950/80">
-          
-          {/* BDT-Soft Branding */}
           <div className="flex items-center justify-center gap-2.5 mb-5 text-indigo-400/70 hover:text-indigo-300 transition-colors cursor-default">
             <div className="p-1.5 bg-indigo-900/50 rounded-md border border-indigo-800/50">
               <MonitorPlay size={14} className="text-indigo-300" />
@@ -88,7 +105,6 @@ export default function MainLayout() {
             <span className="text-[10px] font-bold uppercase tracking-[0.2em]">Powered by BDT-Soft</span>
           </div>
 
-          {/* Premium Logout Button */}
           <button 
             onClick={signOut}
             className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/20 rounded-xl transition-all duration-300 font-bold shadow-sm"
@@ -96,16 +112,19 @@ export default function MainLayout() {
             <LogOut size={18} />
             <span>Log Out</span>
           </button>
-
         </div>
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col h-screen relative bg-gray-50/50">
+      <main className="flex-1 flex flex-col h-screen relative bg-gray-50/50 w-full overflow-hidden">
         {/* Header */}
-        <header className="h-16 bg-white shadow-sm flex items-center justify-between px-6 z-10 border-b border-gray-100">
+        <header className="h-16 bg-white shadow-sm flex items-center justify-between px-4 md:px-6 z-10 border-b border-gray-100">
           <div className="flex items-center gap-4 md:hidden">
-            <button className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors">
+            {/* 🚀 মোবাইল মেনু ওপেন করার বাটন */}
+            <button 
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+            >
               <Menu size={24} />
             </button>
           </div>
@@ -124,7 +143,7 @@ export default function MainLayout() {
         </header>
 
         {/* Dynamic Page Content */}
-        <div className="flex-1 overflow-auto p-6 md:p-8">
+        <div className="flex-1 overflow-auto p-4 md:p-8">
           <Outlet />
         </div>
       </main>
